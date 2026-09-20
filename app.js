@@ -28,9 +28,6 @@ async function init() {
     await syncAuthView();
   });
 
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
-  }
 }
 
 function bindEvents() {
