@@ -19,6 +19,7 @@ create table if not exists public.installations (
   door_type text,
   color text,
   lift_type text,
+  extra_doors jsonb not null default '[]'::jsonb,
   install_date date not null,
   notes text,
   created_at timestamptz not null default now(),
