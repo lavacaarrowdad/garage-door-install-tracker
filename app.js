@@ -292,7 +292,7 @@ async function saveRecord(event) {
     fullAddress(existing).toLowerCase() !== fullAddress(payload).toLowerCase();
 
   if (addressChanged || existing?.latitude == null || existing?.longitude == null) {
-    const coords = await geocodeAddress(fullAddress(payload));
+    const coords = await geocodeRecord(payload);
     payload.latitude = coords ? coords.lat : null;
     payload.longitude = coords ? coords.lng : null;
   } else {
@@ -368,6 +368,29 @@ async function geocodeAddress(address) {
   return null;
 }
 
+async function geocodeRecord(record) {
+  const city = normalizeCity(record.city, record.state);
+  const state = String(record.state || "").trim();
+  const zip = String(record.postal_code || "").trim();
+  const street = String(record.address_line1 || "").trim();
+
+  const candidates = [
+    [street, city, state, zip].filter(Boolean).join(", "),
+    [street, city, state].filter(Boolean).join(", "),
+    [city, state, zip].filter(Boolean).join(", "),
+    [city, state].filter(Boolean).join(", "),
+    zip
+  ].filter((value, index, array) => value && array.indexOf(value) === index);
+
+  for (const candidate of candidates) {
+    const coords = await geocodeAddress(candidate);
+    if (coords) return coords;
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+
+  return null;
+}
+
 async function backfillMissingCoordinates() {
   if (!session) return;
 
@@ -381,7 +404,7 @@ async function backfillMissingCoordinates() {
   for (const record of missing) {
     geocodeAttempted.add(record.id);
 
-    const coords = await geocodeAddress(fullAddress(record));
+    const coords = await geocodeRecord(record);
     if (coords) {
       const { error } = await sb
         .from("installations")
@@ -435,10 +458,17 @@ function renderMapMarkers() {
   getFilteredRecords()
     .filter((record) => record.latitude != null && record.longitude != null)
     .forEach((record) => {
-      const marker = L.circleMarker([record.latitude, record.longitude], {
-        radius: 9,
-        weight: 3,
-        fillOpacity: 0.9
+      const pinIcon = L.divIcon({
+        className: "installation-pin-icon",
+        html: '<div class="installation-pin-dot"><span></span></div>',
+        iconSize: [34, 42],
+        iconAnchor: [17, 42],
+        tooltipAnchor: [0, -36]
+      });
+
+      const marker = L.marker([record.latitude, record.longitude], {
+        icon: pinIcon,
+        title: fullAddress(record)
       }).addTo(markerLayer);
 
       marker.bindTooltip(
@@ -446,7 +476,7 @@ function renderMapMarkers() {
         esc(joinParts(record.manufacturer, record.model_number) || "Garage door") +
         (record.door_size ? "<br>" + esc(record.door_size) : "") +
         "<br><em>Click to open record</em>",
-        { direction: "top", offset: [0, -10] }
+        { direction: "top", offset: [0, -8] }
       );
 
       marker.on("click", () => openRecordDialog(record.id));
@@ -475,7 +505,7 @@ async function focusRecordOnMap(id) {
 
   if (record.latitude == null || record.longitude == null) {
     showToast("Locating this installation...");
-    const coords = await geocodeAddress(fullAddress(record));
+    const coords = await geocodeRecord(record);
 
     if (coords) {
       const { error } = await sb
