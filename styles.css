@@ -168,3 +168,27 @@ dialog::backdrop { background: rgba(0,0,0,.68); backdrop-filter: blur(3px); }
   #recordForm { padding: 15px; }
   .action-row .button { flex: 1 1 42%; }
 }
+
+.installation-pin-icon {
+  background: transparent;
+  border: 0;
+}
+.installation-pin-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50% 50% 50% 0;
+  background: #ef4444;
+  border: 3px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.45);
+  transform: rotate(-45deg);
+  position: relative;
+}
+.installation-pin-dot span {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+  left: 7px;
+  top: 7px;
+}
