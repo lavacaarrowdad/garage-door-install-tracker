@@ -335,16 +335,37 @@ async function deleteRecord(id) {
 }
 
 async function geocodeAddress(address) {
-  try {
-    const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&q=" + encodeURIComponent(address);
-    const response = await fetch(url, { headers: { "Accept-Language": "en" } });
-    if (!response.ok) return null;
-    const data = await response.json();
-    if (!data.length) return null;
-    return { lat: Number(data[0].lat), lng: Number(data[0].lon) };
-  } catch {
-    return null;
+  const candidates = [
+    address,
+    address.replace(/\s+/g, " ").replace(/,\s*,/g, ",").trim()
+  ].filter((value, index, array) => value && array.indexOf(value) === index);
+
+  for (const candidate of candidates) {
+    try {
+      const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&countrycodes=us&q=" + encodeURIComponent(candidate);
+      const response = await fetch(url, {
+        headers: {
+          "Accept": "application/json",
+          "Accept-Language": "en"
+        }
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      if (!data.length) continue;
+
+      const lat = Number(data[0].lat);
+      const lng = Number(data[0].lon);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return { lat, lng };
+      }
+    } catch (error) {
+      console.warn("Geocoding attempt failed:", error);
+    }
   }
+
+  return null;
 }
 
 async function backfillMissingCoordinates() {
@@ -445,16 +466,30 @@ function fitMap() {
   }
 }
 
-function focusRecordOnMap(id) {
+async function focusRecordOnMap(id) {
   const record = records.find((item) => item.id === id);
   if (!record) return;
 
   if (record.latitude == null || record.longitude == null) {
-    window.open(
-      "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(fullAddress(record)),
-      "_blank",
-      "noopener"
-    );
+    showToast("Locating this installation...");
+    const coords = await geocodeAddress(fullAddress(record));
+
+    if (coords) {
+      const { error } = await sb
+        .from("installations")
+        .update({ latitude: coords.lat, longitude: coords.lng })
+        .eq("id", record.id);
+
+      if (!error) {
+        record.latitude = coords.lat;
+        record.longitude = coords.lng;
+        renderMapMarkers();
+      }
+    }
+  }
+
+  if (record.latitude == null || record.longitude == null) {
+    showToast("I could not place this address on the map. Check the city/state/ZIP and try again.", true);
     return;
   }
 
@@ -462,6 +497,7 @@ function focusRecordOnMap(id) {
   ensureMap();
 
   setTimeout(() => {
+    map.invalidateSize();
     map.setView([record.latitude, record.longitude], 16);
     const marker = markerLayer.getLayers().find((layer) => layer.options.recordId === id);
     if (marker) marker.openTooltip();
@@ -499,8 +535,32 @@ function csvValue(value) {
   return '"' + text.replaceAll('"', '""') + '"';
 }
 
-function fullAddress(record) {
+function normalizeCity(city, state) {
+  let value = String(city || "").trim();
+  const stateValue = String(state || "").trim();
+
+  if (!value) return value;
+
+  if (stateValue) {
+    const escapedState = stateValue.replace(/[.*+?^$()|[\]\\]/g, "\\function fullAddress(record) {
   return [record.address_line1, record.city, record.state, record.postal_code]
+    .filter(Boolean)
+    .join(", ");
+}");
+    value = value
+      .replace(new RegExp(",?\\s*" + escapedState + "$", "i"), "")
+      .trim()
+      .replace(/,$/, "")
+      .trim();
+  }
+
+  return value;
+}
+
+function fullAddress(record) {
+  const city = normalizeCity(record.city, record.state);
+  return [record.address_line1, city, record.state, record.postal_code]
+    .map((value) => String(value || "").trim())
     .filter(Boolean)
     .join(", ");
 }
