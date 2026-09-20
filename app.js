@@ -34,7 +34,7 @@ async function init() {
 }
 
 function bindEvents() {
-  el("authForm").addEventListener("submit", sendMagicLink);
+  el("authForm").addEventListener("submit", signIn);
   el("signOutBtn").addEventListener("click", () => sb.auth.signOut());
   el("addBtn").addEventListener("click", () => openRecordDialog());
   el("searchInput").addEventListener("input", renderRecords);
@@ -63,38 +63,33 @@ async function syncAuthView() {
   }
 }
 
-async function sendMagicLink(event) {
+async function signIn(event) {
   event.preventDefault();
 
   const email = el("email").value.trim();
-  if (!email) {
-    setAuthMessage("Enter your email address.", true);
+  const password = el("password").value;
+
+  if (!email || !password) {
+    setAuthMessage("Enter your email and password.", true);
     return;
   }
 
-  const button = el("magicLinkBtn");
+  const button = el("signInBtn");
   button.disabled = true;
-  button.textContent = "Sending...";
-  setAuthMessage("Sending your secure sign-in link...");
+  button.textContent = "Signing in...";
+  setAuthMessage("");
 
-  const redirectTo = window.location.origin + window.location.pathname;
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: redirectTo,
-      shouldCreateUser: true
-    }
-  });
+  const { error } = await sb.auth.signInWithPassword({ email, password });
 
   button.disabled = false;
-  button.textContent = "Send sign-in link";
+  button.textContent = "Sign in";
 
   if (error) {
-    setAuthMessage(error.message, true);
+    setAuthMessage("Sign-in failed. Check the email and password.", true);
     return;
   }
 
-  setAuthMessage("Check your email and tap the sign-in link. You can close this page after the email arrives.");
+  setAuthMessage("");
 }
 
 function setAuthMessage(message, isError) {
