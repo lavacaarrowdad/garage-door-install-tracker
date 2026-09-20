@@ -42,7 +42,21 @@ function bindEvents() {
   el("authForm").addEventListener("submit", signIn);
   el("signOutBtn").addEventListener("click", () => sb.auth.signOut());
   el("addBtn").addEventListener("click", () => openRecordDialog());
-  el("searchInput").addEventListener("input", renderRecords);
+  el("searchForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    renderRecords();
+    renderMapMarkers();
+  });
+  el("searchInput").addEventListener("input", () => {
+    renderRecords();
+    renderMapMarkers();
+  });
+  el("clearSearchBtn").addEventListener("click", () => {
+    el("searchInput").value = "";
+    renderRecords();
+    renderMapMarkers();
+    el("searchInput").focus();
+  });
   el("mapToggleBtn").addEventListener("click", toggleMap);
   el("exportBtn").addEventListener("click", exportCsv);
   el("recordForm").addEventListener("submit", saveRecord);
@@ -142,17 +156,39 @@ async function loadRecords() {
   backfillMissingCoordinates();
 }
 
-function renderRecords() {
+function getFilteredRecords() {
   const query = el("searchInput").value.trim().toLowerCase();
-  const filtered = records.filter((record) => {
-    if (!query) return true;
-    return [
-      record.customer_name, record.address_line1, record.city, record.state,
-      record.postal_code, record.manufacturer, record.model_number,
-      record.door_size, record.spring_size, record.door_type,
-      record.color, record.lift_type, record.notes
-    ].some((value) => String(value || "").toLowerCase().includes(query));
+  if (!query) return records;
+
+  const terms = query.split(/\s+/).filter(Boolean);
+
+  return records.filter((record) => {
+    const haystack = [
+      record.customer_name,
+      record.address_line1,
+      record.city,
+      record.state,
+      record.postal_code,
+      record.manufacturer,
+      record.model_number,
+      record.door_size,
+      record.spring_size,
+      record.spring_count,
+      record.door_type,
+      record.color,
+      record.lift_type,
+      record.install_date,
+      formatDate(record.install_date),
+      record.notes
+    ].map((value) => String(value || "").toLowerCase()).join(" ");
+
+    return terms.every((term) => haystack.includes(term));
   });
+}
+
+function renderRecords() {
+  const query = el("searchInput").value.trim();
+  const filtered = getFilteredRecords();
 
   el("recordCount").textContent = records.length;
   el("filterCount").textContent = query ? filtered.length + " matching" : "";
@@ -375,7 +411,7 @@ function renderMapMarkers() {
   if (!map || !markerLayer) return;
 
   markerLayer.clearLayers();
-  records
+  getFilteredRecords()
     .filter((record) => record.latitude != null && record.longitude != null)
     .forEach((record) => {
       const marker = L.marker([record.latitude, record.longitude], {
