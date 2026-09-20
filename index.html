@@ -29,16 +29,18 @@
     <section id="authView" class="auth-wrap">
       <div class="panel auth-card">
         <h2>Sign in</h2>
-        <p class="muted">Enter your email and we'll send you a secure sign-in link. No password is needed.</p>
+        <p class="muted">Use the email and password provided for this installation tracker.</p>
         <form id="authForm">
           <label>Email
             <input id="email" type="email" autocomplete="email" inputmode="email" required>
           </label>
+          <label>Password
+            <input id="password" type="password" autocomplete="current-password" minlength="6" required>
+          </label>
           <div class="button-row">
-            <button id="magicLinkBtn" class="button primary" type="submit">Send sign-in link</button>
+            <button id="signInBtn" class="button primary" type="submit">Sign in</button>
           </div>
         </form>
-        <p class="muted">Use the same email each time so you return to the same installation records.</p>
         <p id="authMessage" class="status-text"></p>
       </div>
     </section>
