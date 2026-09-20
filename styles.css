@@ -445,3 +445,84 @@ dialog::backdrop { background: rgba(0,0,0,.68); backdrop-filter: blur(3px); }
   left: 7px;
   top: 7px;
 }
+
+.add-door-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 0 4px;
+}
+.door-section-label {
+  color: var(--accent);
+  font-size: .76rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding-top: 3px;
+}
+.extra-doors-container {
+  display: grid;
+  gap: 12px;
+}
+.extra-door-card {
+  border: 1px solid #344761;
+  background: #0a1626;
+  border-radius: 13px;
+  padding: 13px;
+}
+.extra-door-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.extra-door-card-header strong {
+  color: var(--accent);
+}
+.extra-door-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 12px;
+}
+.extra-door-summary-list {
+  display: grid;
+  gap: 7px;
+}
+.extra-door-summary {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  border-left: 3px solid var(--accent);
+  padding: 7px 9px;
+  background: #0a1626;
+  border-radius: 7px;
+}
+.extra-door-summary strong {
+  white-space: nowrap;
+}
+.extra-door-summary span {
+  color: var(--muted);
+  font-size: .84rem;
+}
+@media (max-width: 720px) {
+  .add-door-row {
+    align-items: stretch;
+  }
+  .add-door-row .button {
+    width: 100%;
+    min-height: 44px;
+  }
+  .add-door-row .muted {
+    font-size: .8rem;
+  }
+  .extra-door-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .extra-door-card {
+    padding: 11px;
+  }
+}
