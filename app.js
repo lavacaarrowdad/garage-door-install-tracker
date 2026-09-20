@@ -435,15 +435,18 @@ function renderMapMarkers() {
   getFilteredRecords()
     .filter((record) => record.latitude != null && record.longitude != null)
     .forEach((record) => {
-      const marker = L.marker([record.latitude, record.longitude], {
-        title: fullAddress(record)
+      const marker = L.circleMarker([record.latitude, record.longitude], {
+        radius: 9,
+        weight: 3,
+        fillOpacity: 0.9
       }).addTo(markerLayer);
 
       marker.bindTooltip(
         "<strong>" + esc(fullAddress(record)) + "</strong><br>" +
         esc(joinParts(record.manufacturer, record.model_number) || "Garage door") +
-        (record.door_size ? "<br>" + esc(record.door_size) : ""),
-        { direction: "top", offset: [0, -8] }
+        (record.door_size ? "<br>" + esc(record.door_size) : "") +
+        "<br><em>Click to open record</em>",
+        { direction: "top", offset: [0, -10] }
       );
 
       marker.on("click", () => openRecordDialog(record.id));
@@ -460,7 +463,7 @@ function fitMap() {
   if (!layers.length) return;
 
   if (layers.length === 1) {
-    map.setView(layers[0].getLatLng(), 15);
+    map.setView(layers[0].getLatLng(), 14);
   } else {
     map.fitBounds(L.featureGroup(layers).getBounds().pad(0.15));
   }
