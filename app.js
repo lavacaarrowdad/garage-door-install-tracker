@@ -1,4 +1,4 @@
-const SUPABASE_URL = "https://ypgddxhgrzqhbrghvrzf.supabase.co";
+const SUPABASE_URL = "https://ypgddxhgrzghbrghyrzf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_RF9DMVXE3ArfI25wpVI7bg_3H8DeLXg";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
@@ -166,7 +166,7 @@ async function loadRecords() {
   renderRecords();
   ensureMap();
   renderMapMarkers();
-  backfillMissingCoordinates();
+  refreshMapCoordinates();
 }
 
 function getFilteredRecords() {
@@ -446,91 +446,197 @@ async function deleteRecord(id) {
   await loadRecords();
 }
 
-async function geocodeAddress(address) {
-  const candidates = [
-    address,
-    address.replace(/\s+/g, " ").replace(/,\s*,/g, ",").trim()
-  ].filter((value, index, array) => value && array.indexOf(value) === index);
+function normalizeGeoText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(street)\b/g, "st")
+    .replace(/\b(road)\b/g, "rd")
+    .replace(/\b(avenue)\b/g, "ave")
+    .replace(/\b(boulevard)\b/g, "blvd")
+    .replace(/\b(drive)\b/g, "dr")
+    .replace(/\b(lane)\b/g, "ln")
+    .replace(/\b(highway)\b/g, "hwy")
+    .replace(/\b(route)\b/g, "rte")
+    .replace(/\b(north)\b/g, "n")
+    .replace(/\b(south)\b/g, "s")
+    .replace(/\b(east)\b/g, "e")
+    .replace(/\b(west)\b/g, "w")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
 
-  for (const candidate of candidates) {
-    try {
-      const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&countrycodes=us&q=" + encodeURIComponent(candidate);
-      const response = await fetch(url, {
-        headers: {
-          "Accept": "application/json",
-          "Accept-Language": "en"
-        }
-      });
+function parseStreet(value) {
+  const cleaned = String(value || "")
+    .replace(/\s+(apt|apartment|unit|suite|ste|#)\s*.*$/i, "")
+    .trim();
+  const match = cleaned.match(/^(\d+[a-zA-Z0-9-]*)\s+(.+)$/);
+  return {
+    full: cleaned,
+    house: match ? match[1] : "",
+    road: match ? match[2] : cleaned
+  };
+}
 
-      if (!response.ok) continue;
+function resultRoad(address = {}) {
+  return address.road || address.residential || address.pedestrian ||
+    address.highway || address.path || address.place || "";
+}
 
-      const data = await response.json();
-      if (!data.length) continue;
+function resultLocality(address = {}) {
+  return address.city || address.town || address.village ||
+    address.hamlet || address.municipality || address.county || "";
+}
 
-      const lat = Number(data[0].lat);
-      const lng = Number(data[0].lon);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        return { lat, lng };
-      }
-    } catch (error) {
-      console.warn("Geocoding attempt failed:", error);
-    }
+function roadCore(value) {
+  const stop = new Set(["st","rd","ave","blvd","dr","ln","hwy","rte","ct","cir","pl","pkwy","way","ter"]);
+  return normalizeGeoText(value)
+    .split(" ")
+    .filter((token) => token && !stop.has(token))
+    .join(" ");
+}
+
+function isConfidentStreetMatch(result, record) {
+  const address = result.address || {};
+  const inputStreet = parseStreet(record.address_line1);
+  const inputRoad = roadCore(inputStreet.road);
+  const matchedRoad = roadCore(resultRoad(address));
+  const resultHouse = normalizeGeoText(address.house_number || "");
+
+  if (inputStreet.house && resultHouse !== normalizeGeoText(inputStreet.house)) {
+    return false;
   }
 
-  return null;
+  if (inputRoad && matchedRoad) {
+    const roadMatches = matchedRoad.includes(inputRoad) || inputRoad.includes(matchedRoad);
+    if (!roadMatches) return false;
+  } else if (inputRoad) {
+    const display = normalizeGeoText(result.display_name || "");
+    if (!display.includes(inputRoad)) return false;
+  }
+
+  const city = normalizeGeoText(normalizeCity(record.city, record.state));
+  const locality = normalizeGeoText(resultLocality(address));
+  const display = normalizeGeoText(result.display_name || "");
+  if (city && locality && city !== locality && !display.includes(city)) {
+    return false;
+  }
+
+  const inputZip = String(record.postal_code || "").trim().slice(0, 5);
+  const resultZip = String(address.postcode || "").trim().slice(0, 5);
+  if (inputZip && resultZip && inputZip !== resultZip) {
+    return false;
+  }
+
+  return Number.isFinite(Number(result.lat)) && Number.isFinite(Number(result.lon));
+}
+
+async function nominatimSearch(url) {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "Accept": "application/json",
+        "Accept-Language": "en"
+      }
+    });
+    if (!response.ok) return [];
+    return await response.json();
+  } catch (error) {
+    console.warn("Geocoding request failed:", error);
+    return [];
+  }
 }
 
 async function geocodeRecord(record) {
+  const street = parseStreet(record.address_line1).full;
   const city = normalizeCity(record.city, record.state);
   const state = String(record.state || "").trim();
   const zip = String(record.postal_code || "").trim();
-  const street = String(record.address_line1 || "").trim();
 
-  const candidates = [
-    [street, city, state, zip].filter(Boolean).join(", "),
-    [street, city, state].filter(Boolean).join(", "),
-    [city, state, zip].filter(Boolean).join(", "),
-    [city, state].filter(Boolean).join(", "),
-    zip
-  ].filter((value, index, array) => value && array.indexOf(value) === index);
+  // First use Nominatim's structured address search.
+  const structured = new URLSearchParams({
+    format: "jsonv2",
+    limit: "5",
+    addressdetails: "1",
+    countrycodes: "us",
+    street
+  });
+  if (city) structured.set("city", city);
+  if (state) structured.set("state", state);
+  if (zip) structured.set("postalcode", zip);
 
-  for (const candidate of candidates) {
-    const coords = await geocodeAddress(candidate);
-    if (coords) return coords;
-    await new Promise((resolve) => setTimeout(resolve, 350));
-  }
-
-  return null;
-}
-
-async function backfillMissingCoordinates() {
-  if (!session) return;
-
-  const missing = records.filter((record) =>
-    (record.latitude == null || record.longitude == null) &&
-    !geocodeAttempted.has(record.id)
+  let results = await nominatimSearch(
+    "https://nominatim.openstreetmap.org/search?" + structured.toString()
   );
 
-  if (!missing.length) return;
+  // If structured search misses, try only the complete street address.
+  if (!results.some((result) => isConfidentStreetMatch(result, record))) {
+    const full = [street, city, state, zip].filter(Boolean).join(", ");
+    const freeform = new URLSearchParams({
+      format: "jsonv2",
+      limit: "5",
+      addressdetails: "1",
+      countrycodes: "us",
+      q: full
+    });
+    results = await nominatimSearch(
+      "https://nominatim.openstreetmap.org/search?" + freeform.toString()
+    );
+  }
 
-  for (const record of missing) {
+  const match = results.find((result) => isConfidentStreetMatch(result, record));
+  if (!match) return null;
+
+  return { lat: Number(match.lat), lng: Number(match.lon) };
+}
+
+async function refreshMapCoordinates() {
+  if (!session) return;
+
+  const candidates = records.filter((record) => !geocodeAttempted.has(record.id));
+  if (!candidates.length) return;
+
+  for (const record of candidates) {
     geocodeAttempted.add(record.id);
-
     const coords = await geocodeRecord(record);
-    if (coords) {
-      const { error } = await sb
-        .from("installations")
-        .update({ latitude: coords.lat, longitude: coords.lng })
-        .eq("id", record.id);
 
-      if (!error) {
-        record.latitude = coords.lat;
-        record.longitude = coords.lng;
-        renderMapMarkers();
+    // Never keep an approximate city/ZIP pin when the street address cannot be verified.
+    if (!coords) {
+      if (record.latitude != null || record.longitude != null) {
+        const { error } = await sb
+          .from("installations")
+          .update({ latitude: null, longitude: null })
+          .eq("id", record.id);
+
+        if (!error) {
+          record.latitude = null;
+          record.longitude = null;
+          renderMapMarkers();
+        }
+      }
+    } else {
+      const moved =
+        record.latitude == null ||
+        record.longitude == null ||
+        Math.abs(Number(record.latitude) - coords.lat) > 0.00001 ||
+        Math.abs(Number(record.longitude) - coords.lng) > 0.00001;
+
+      if (moved) {
+        const { error } = await sb
+          .from("installations")
+          .update({ latitude: coords.lat, longitude: coords.lng })
+          .eq("id", record.id);
+
+        if (!error) {
+          record.latitude = coords.lat;
+          record.longitude = coords.lng;
+          renderMapMarkers();
+        }
       }
     }
 
-    // Be polite to the free OpenStreetMap geocoding service.
+    // Keep requests under the public Nominatim rate limit.
     await new Promise((resolve) => setTimeout(resolve, 1100));
   }
 }
@@ -634,7 +740,12 @@ async function focusRecordOnMap(id) {
   }
 
   if (record.latitude == null || record.longitude == null) {
-    showToast("I could not place this address on the map. Check the city/state/ZIP and try again.", true);
+    showToast("No exact street-level map match was found. Opening the address in Google Maps instead.", true);
+    window.open(
+      "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(fullAddress(record)),
+      "_blank",
+      "noopener"
+    );
     return;
   }
 
