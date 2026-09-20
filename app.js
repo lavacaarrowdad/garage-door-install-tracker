@@ -539,22 +539,18 @@ function normalizeCity(city, state) {
   let value = String(city || "").trim();
   const stateValue = String(state || "").trim();
 
-  if (!value) return value;
+  if (!value || !stateValue) return value;
 
-  if (stateValue) {
-    const escapedState = stateValue.replace(/[.*+?^$()|[\]\\]/g, "\\function fullAddress(record) {
-  return [record.address_line1, record.city, record.state, record.postal_code]
-    .filter(Boolean)
-    .join(", ");
-}");
-    value = value
-      .replace(new RegExp(",?\\s*" + escapedState + "$", "i"), "")
-      .trim()
-      .replace(/,$/, "")
-      .trim();
+  const lowerValue = value.toLowerCase();
+  const lowerState = stateValue.toLowerCase();
+
+  if (lowerValue.endsWith(", " + lowerState)) {
+    value = value.slice(0, -(stateValue.length + 2)).trim();
+  } else if (lowerValue.endsWith(" " + lowerState)) {
+    value = value.slice(0, -(stateValue.length + 1)).trim();
   }
 
-  return value;
+  return value.replace(/,\s*$/, "").trim();
 }
 
 function fullAddress(record) {
