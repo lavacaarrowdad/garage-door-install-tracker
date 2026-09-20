@@ -23,9 +23,16 @@ async function init() {
   session = result.data.session;
   await syncAuthView();
 
-  sb.auth.onAuthStateChange(async (_event, newSession) => {
+  sb.auth.onAuthStateChange((_event, newSession) => {
     session = newSession;
-    await syncAuthView();
+    // Do not await Supabase/database work inside the auth callback.
+    // Supabase documents that async API calls here can deadlock auth.
+    setTimeout(() => {
+      syncAuthView().catch((error) => {
+        console.error("Auth view sync failed:", error);
+        showToast("Signed in, but loading records failed. Refresh and try again.", true);
+      });
+    }, 0);
   });
 
 }
