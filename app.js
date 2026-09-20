@@ -83,13 +83,34 @@ async function signIn(event) {
   button.textContent = "Signing in...";
   setAuthMessage("");
 
-  const { error } = await sb.auth.signInWithPassword({ email, password });
+  let result;
+  try {
+    result = await Promise.race([
+      sb.auth.signInWithPassword({ email, password }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("AUTH_TIMEOUT")), 15000)
+      )
+    ]);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "Sign in";
+
+    if (error?.message === "AUTH_TIMEOUT") {
+      setAuthMessage("The login service is not responding right now. Please try again in a few minutes.", true);
+      return;
+    }
+
+    console.error("Sign-in request failed:", error);
+    setAuthMessage("Could not reach the login service. Check your connection and try again.", true);
+    return;
+  }
 
   button.disabled = false;
   button.textContent = "Sign in";
 
-  if (error) {
-    setAuthMessage("Sign-in failed. Check the email and password.", true);
+  if (result.error) {
+    console.error("Supabase sign-in error:", result.error);
+    setAuthMessage("Sign-in failed: " + result.error.message, true);
     return;
   }
 
