@@ -1,6 +1,11 @@
 const SUPABASE_URL = "https://ypgddxhgrzghbrghyrzf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_RF9DMVXE3ArfI25wpVI7bg_3H8DeLXg";
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const authLock = async (_name, _acquireTimeout, fn) => await fn();
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    lock: authLock
+  }
+});
 
 let session = null;
 let records = [];
@@ -104,38 +109,70 @@ async function signIn(event) {
   button.textContent = "Signing in...";
   setAuthMessage("");
 
-  let result;
-  try {
-    result = await Promise.race([
-      sb.auth.signInWithPassword({ email, password }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("AUTH_TIMEOUT")), 15000)
-      )
-    ]);
-  } catch (error) {
-    button.disabled = false;
-    button.textContent = "Sign in";
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    if (error?.message === "AUTH_TIMEOUT") {
-      setAuthMessage("The login service is not responding right now. Please try again in a few minutes.", true);
+  try {
+    // Use the Auth REST endpoint directly so a stale browser auth lock
+    // cannot leave the sign-in button hanging indefinitely.
+    const response = await fetch(
+      SUPABASE_URL + "/auth/v1/token?grant_type=password",
+      {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_PUBLISHABLE_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const message = data.msg || data.message || data.error_description || data.error || ("HTTP " + response.status);
+      setAuthMessage("Sign-in failed: " + message, true);
       return;
     }
 
+    if (!data.access_token || !data.refresh_token) {
+      setAuthMessage("Sign-in failed: the login service returned an incomplete session.", true);
+      return;
+    }
+
+    const sessionResult = await Promise.race([
+      sb.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("SESSION_TIMEOUT")), 10000)
+      )
+    ]);
+
+    if (sessionResult.error) {
+      setAuthMessage("Sign-in failed: " + sessionResult.error.message, true);
+      return;
+    }
+
+    session = sessionResult.data.session;
+    setAuthMessage("");
+    await syncAuthView();
+  } catch (error) {
     console.error("Sign-in request failed:", error);
-    setAuthMessage("Could not reach the login service. Check your connection and try again.", true);
-    return;
+    if (error?.name === "AbortError") {
+      setAuthMessage("The login service did not respond within 30 seconds. Please try again.", true);
+    } else if (error?.message === "SESSION_TIMEOUT") {
+      setAuthMessage("Login succeeded, but the browser session could not be saved. Close other tracker tabs and try again.", true);
+    } else {
+      setAuthMessage("Could not reach the login service. Check your connection and try again.", true);
+    }
+  } finally {
+    clearTimeout(timeoutId);
+    button.disabled = false;
+    button.textContent = "Sign in";
   }
-
-  button.disabled = false;
-  button.textContent = "Sign in";
-
-  if (result.error) {
-    console.error("Supabase sign-in error:", result.error);
-    setAuthMessage("Sign-in failed: " + result.error.message, true);
-    return;
-  }
-
-  setAuthMessage("");
 }
 
 function setAuthMessage(message, isError) {
