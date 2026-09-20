@@ -178,6 +178,15 @@
   </dialog>
 
   <div id="toast" class="toast hidden" role="status"></div>
-  <script src="./app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations
+          .filter((registration) => registration.scope.includes("/garage-door-install-tracker/"))
+          .forEach((registration) => registration.unregister());
+      });
+    }
+  </script>
+  <script src="./app.js?v=4"></script>
 </body>
 </html>
