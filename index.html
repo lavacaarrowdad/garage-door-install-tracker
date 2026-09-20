@@ -59,15 +59,15 @@
 
       <div class="action-row">
         <button id="addBtn" class="button primary" type="button">+ Add installation</button>
-        <button id="mapToggleBtn" class="button secondary" type="button">Show map</button>
+        <button id="mapToggleBtn" class="button secondary" type="button">Hide map</button>
         <button id="exportBtn" class="button secondary" type="button">Export CSV</button>
       </div>
 
-      <section id="mapPanel" class="panel map-panel hidden">
+      <section id="mapPanel" class="panel map-panel">
         <div class="panel-heading">
           <div>
             <h2>Installation Map</h2>
-            <p class="muted">Pins appear for addresses that can be located automatically.</p>
+            <p class="muted">All located installations are shown here. Click any pin to open that installation record.</p>
           </div>
         </div>
         <div id="map"></div>
@@ -187,6 +187,6 @@
       });
     }
   </script>
-  <script src="./app.js?v=7"></script>
+  <script src="./app.js?v=8"></script>
 </body>
 </html>
