@@ -1,4 +1,4 @@
-const CACHE = "garage-door-install-tracker-v1";
+const CACHE = "garage-door-install-tracker-v2";
 const LOCAL_FILES = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
