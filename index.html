@@ -52,8 +52,12 @@
           <strong id="recordCount">0</strong>
         </div>
         <div class="metric grow">
-          <span class="metric-label">SEARCH</span>
-          <input id="searchInput" type="search" placeholder="Address, model, size, color, spring...">
+          <span class="metric-label">FIND AN INSTALLATION</span>
+          <form id="searchForm" class="search-controls">
+            <input id="searchInput" type="search" autocomplete="off" placeholder="Customer, address, model, size, spring, color, date...">
+            <button id="searchBtn" class="button primary small" type="submit">Search</button>
+            <button id="clearSearchBtn" class="button secondary small" type="button">Clear</button>
+          </form>
         </div>
       </div>
 
@@ -187,6 +191,6 @@
       });
     }
   </script>
-  <script src="./app.js?v=8"></script>
+  <script src="./app.js?v=9"></script>
 </body>
 </html>
