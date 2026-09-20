@@ -7,7 +7,12 @@ let records = [];
 let editingId = null;
 let map = null;
 let markerLayer = null;
+let supportsExtraDoors = true;
 const geocodeAttempted = new Set();
+const extraDoorFields = [
+  "manufacturer", "model_number", "door_size", "spring_size",
+  "door_type", "color", "lift_type", "spring_count"
+];
 
 const el = (id) => document.getElementById(id);
 const fields = [
@@ -42,6 +47,7 @@ function bindEvents() {
   el("authForm").addEventListener("submit", signIn);
   el("signOutBtn").addEventListener("click", () => sb.auth.signOut());
   el("addBtn").addEventListener("click", () => openRecordDialog());
+  el("addExtraDoorBtn").addEventListener("click", () => addExtraDoorCard());
   el("searchForm").addEventListener("submit", (event) => {
     event.preventDefault();
     renderRecords();
@@ -138,6 +144,13 @@ function setAuthMessage(message, isError) {
 }
 
 async function loadRecords() {
+  const supportCheck = await sb.from("installations").select("extra_doors").limit(1);
+  supportsExtraDoors = !supportCheck.error;
+  el("addExtraDoorBtn").disabled = !supportsExtraDoors;
+  el("addExtraDoorBtn").title = supportsExtraDoors
+    ? "Add another door to this installation"
+    : "Database update required before adding extra doors";
+
   const { data, error } = await sb
     .from("installations")
     .select("*")
@@ -179,7 +192,8 @@ function getFilteredRecords() {
       record.lift_type,
       record.install_date,
       formatDate(record.install_date),
-      record.notes
+      record.notes,
+      JSON.stringify(record.extra_doors || [])
     ].map((value) => String(value || "").toLowerCase()).join(" ");
 
     return terms.every((term) => haystack.includes(term));
@@ -215,6 +229,7 @@ function renderRecords() {
 
 function recordCardHtml(record) {
   const address = fullAddress(record);
+  const extraDoors = Array.isArray(record.extra_doors) ? record.extra_doors : [];
   const details = [
     ["Model", joinParts(record.manufacturer, record.model_number)],
     ["Door size", record.door_size],
@@ -232,6 +247,14 @@ function recordCardHtml(record) {
     '<div class="record-details">' +
       details.map((item) => '<div class="detail"><span>' + esc(item[0]) + '</span><strong>' + esc(item[1]) + '</strong></div>').join("") +
     '</div>' +
+    (extraDoors.length
+      ? '<div class="extra-door-summary-list">' +
+        extraDoors.map((door, index) =>
+          '<div class="extra-door-summary"><strong>Door ' + (index + 2) + '</strong><span>' +
+          esc(extraDoorSummary(door)) + '</span></div>'
+        ).join("") +
+        '</div>'
+      : '') +
     (record.notes ? '<p class="muted">' + esc(record.notes) + '</p>' : '') +
     '<div class="record-actions">' +
       '<button class="button secondary small" data-edit="' + esc(record.id) + '">Edit</button>' +
@@ -241,9 +264,93 @@ function recordCardHtml(record) {
   '</article>';
 }
 
+function extraDoorSummary(door) {
+  const parts = [
+    joinParts(door.manufacturer, door.model_number),
+    door.door_size,
+    door.spring_size ? "Spring " + door.spring_size : "",
+    door.door_type,
+    door.color,
+    door.lift_type
+  ].filter(Boolean);
+  return parts.join(" • ") || "Additional door";
+}
+
+function addExtraDoorCard(door = {}) {
+  if (!supportsExtraDoors) {
+    showToast("Run the multi-door database update first, then refresh the app.", true);
+    return;
+  }
+
+  const container = el("extraDoorsContainer");
+  const card = document.createElement("div");
+  card.className = "extra-door-card";
+  card.innerHTML =
+    '<div class="extra-door-card-header">' +
+      '<strong>Additional door</strong>' +
+      '<button class="button danger small remove-extra-door" type="button">Remove</button>' +
+    '</div>' +
+    '<div class="extra-door-grid">' +
+      '<label>Manufacturer<input data-door-field="manufacturer" placeholder="Clopay, Wayne Dalton..."></label>' +
+      '<label>Model #<input data-door-field="model_number"></label>' +
+      '<label>Door size<input data-door-field="door_size" placeholder="16 x 7"></label>' +
+      '<label>Spring size<input data-door-field="spring_size" placeholder=".250 x 2 x 31"></label>' +
+      '<label>Door type<input data-door-field="door_type" list="doorTypes" placeholder="Raised panel"></label>' +
+      '<label>Color<input data-door-field="color" list="colors" placeholder="White"></label>' +
+      '<label>Lift<input data-door-field="lift_type" list="liftTypes" placeholder="Standard lift"></label>' +
+      '<label>Number of springs<input data-door-field="spring_count" type="number" min="0" step="1"></label>' +
+    '</div>';
+
+  extraDoorFields.forEach((name) => {
+    const input = card.querySelector('[data-door-field="' + name + '"]');
+    if (!input) return;
+    const value = door[name];
+    input.value = value == null ? "" : value;
+  });
+
+  card.querySelector(".remove-extra-door").addEventListener("click", () => {
+    card.remove();
+    renumberExtraDoors();
+  });
+
+  container.appendChild(card);
+  renumberExtraDoors();
+}
+
+function renumberExtraDoors() {
+  el("extraDoorsContainer").querySelectorAll(".extra-door-card").forEach((card, index) => {
+    const title = card.querySelector(".extra-door-card-header strong");
+    if (title) title.textContent = "Door " + (index + 2);
+  });
+}
+
+function renderExtraDoors(doors) {
+  const container = el("extraDoorsContainer");
+  container.innerHTML = "";
+  if (!supportsExtraDoors || !Array.isArray(doors)) return;
+  doors.forEach((door) => addExtraDoorCard(door));
+}
+
+function collectExtraDoors() {
+  return Array.from(el("extraDoorsContainer").querySelectorAll(".extra-door-card"))
+    .map((card) => {
+      const door = {};
+      extraDoorFields.forEach((name) => {
+        const input = card.querySelector('[data-door-field="' + name + '"]');
+        if (!input) return;
+        let value = input.value.trim();
+        if (name === "spring_count") value = value === "" ? null : Number(value);
+        door[name] = value === "" ? null : value;
+      });
+      return door;
+    })
+    .filter((door) => extraDoorFields.some((name) => door[name] !== null && door[name] !== ""));
+}
+
 function openRecordDialog(id) {
   editingId = id || null;
   el("recordForm").reset();
+  el("extraDoorsContainer").innerHTML = "";
 
   if (editingId) {
     const record = records.find((item) => item.id === editingId);
@@ -252,6 +359,7 @@ function openRecordDialog(id) {
     fields.forEach((name) => {
       el(name).value = record[name] ?? "";
     });
+    renderExtraDoors(record.extra_doors || []);
   } else {
     el("dialogTitle").textContent = "Add installation";
     el("install_date").value = new Date().toISOString().slice(0, 10);
@@ -279,6 +387,10 @@ async function saveRecord(event) {
     if (name === "spring_count") value = value === "" ? null : Number(value);
     payload[name] = value === "" ? null : value;
   });
+
+  if (supportsExtraDoors) {
+    payload.extra_doors = collectExtraDoors();
+  }
 
   if (!payload.address_line1 || !payload.city || !payload.state || !payload.install_date) {
     showToast("Address, city, state and install date are required.", true);
@@ -546,11 +658,14 @@ function exportCsv() {
   const columns = [
     "customer_name","address_line1","city","state","postal_code","manufacturer",
     "model_number","door_size","spring_size","spring_count","door_type","color",
-    "lift_type","install_date","notes"
+    "lift_type","install_date","extra_doors","notes"
   ];
 
   const rows = [columns].concat(
-    records.map((record) => columns.map((column) => record[column] ?? ""))
+    records.map((record) => columns.map((column) => {
+      if (column === "extra_doors") return JSON.stringify(record.extra_doors || []);
+      return record[column] ?? "";
+    }))
   );
 
   const csv = rows.map((row) => row.map(csvValue).join(",")).join("\r\n");
