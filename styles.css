@@ -83,6 +83,13 @@ textarea { resize: vertical; }
 .metric { padding: 16px; }
 .metric strong { display: block; font-size: 2rem; line-height: 1; margin-top: 10px; }
 .metric-label { color: var(--muted); font-size: .7rem; font-weight: 900; letter-spacing: .12em; }
+.search-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  margin-top: 8px;
+}
+.search-controls .button { align-self: stretch; }
 .action-row { margin: 14px 0; }
 .map-panel { padding: 15px; margin-bottom: 20px; }
 #map { height: min(52vh, 430px); min-height: 300px; border-radius: 13px; overflow: hidden; }
@@ -149,6 +156,8 @@ dialog::backdrop { background: rgba(0,0,0,.68); backdrop-filter: blur(3px); }
   #userEmail { max-width: 155px; overflow: hidden; text-overflow: ellipsis; }
   .page-shell { width: min(100% - 18px, 1120px); margin-top: 12px; }
   .dashboard-row { grid-template-columns: 100px 1fr; }
+  .search-controls { grid-template-columns: 1fr 1fr; }
+  .search-controls input { grid-column: 1 / -1; }
   .metric { padding: 13px; }
   .metric strong { font-size: 1.6rem; }
   .records-grid { grid-template-columns: 1fr; }
