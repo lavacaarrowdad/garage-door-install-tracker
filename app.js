@@ -34,8 +34,7 @@ async function init() {
 }
 
 function bindEvents() {
-  el("authForm").addEventListener("submit", signIn);
-  el("signUpBtn").addEventListener("click", signUp);
+  el("authForm").addEventListener("submit", sendMagicLink);
   el("signOutBtn").addEventListener("click", () => sb.auth.signOut());
   el("addBtn").addEventListener("click", () => openRecordDialog());
   el("searchInput").addEventListener("input", renderRecords);
@@ -64,32 +63,38 @@ async function syncAuthView() {
   }
 }
 
-async function signIn(event) {
+async function sendMagicLink(event) {
   event.preventDefault();
-  setAuthMessage("Signing in...");
-  const { error } = await sb.auth.signInWithPassword({
-    email: el("email").value.trim(),
-    password: el("password").value
-  });
-  if (error) setAuthMessage(error.message, true);
-  else setAuthMessage("");
-}
 
-async function signUp() {
   const email = el("email").value.trim();
-  const password = el("password").value;
-  if (!email || password.length < 6) {
-    setAuthMessage("Enter an email and a password of at least 6 characters.", true);
+  if (!email) {
+    setAuthMessage("Enter your email address.", true);
     return;
   }
-  setAuthMessage("Creating account...");
-  const { data, error } = await sb.auth.signUp({ email, password });
+
+  const button = el("magicLinkBtn");
+  button.disabled = true;
+  button.textContent = "Sending...";
+  setAuthMessage("Sending your secure sign-in link...");
+
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: redirectTo,
+      shouldCreateUser: true
+    }
+  });
+
+  button.disabled = false;
+  button.textContent = "Send sign-in link";
+
   if (error) {
     setAuthMessage(error.message, true);
     return;
   }
-  if (data.session) setAuthMessage("Account created.");
-  else setAuthMessage("Account created. Check your email for the confirmation link, then sign in.");
+
+  setAuthMessage("Check your email and tap the sign-in link. You can close this page after the email arrives.");
 }
 
 function setAuthMessage(message, isError) {
