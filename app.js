@@ -7,6 +7,7 @@ let records = [];
 let editingId = null;
 let map = null;
 let markerLayer = null;
+const geocodeAttempted = new Set();
 
 const el = (id) => document.getElementById(id);
 const fields = [
@@ -136,7 +137,9 @@ async function loadRecords() {
 
   records = data || [];
   renderRecords();
+  ensureMap();
   renderMapMarkers();
+  backfillMissingCoordinates();
 }
 
 function renderRecords() {
@@ -308,6 +311,38 @@ async function geocodeAddress(address) {
   }
 }
 
+async function backfillMissingCoordinates() {
+  if (!session) return;
+
+  const missing = records.filter((record) =>
+    (record.latitude == null || record.longitude == null) &&
+    !geocodeAttempted.has(record.id)
+  );
+
+  if (!missing.length) return;
+
+  for (const record of missing) {
+    geocodeAttempted.add(record.id);
+
+    const coords = await geocodeAddress(fullAddress(record));
+    if (coords) {
+      const { error } = await sb
+        .from("installations")
+        .update({ latitude: coords.lat, longitude: coords.lng })
+        .eq("id", record.id);
+
+      if (!error) {
+        record.latitude = coords.lat;
+        record.longitude = coords.lng;
+        renderMapMarkers();
+      }
+    }
+
+    // Be polite to the free OpenStreetMap geocoding service.
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+  }
+}
+
 function toggleMap() {
   const panel = el("mapPanel");
   const opening = panel.classList.contains("hidden");
@@ -343,12 +378,18 @@ function renderMapMarkers() {
   records
     .filter((record) => record.latitude != null && record.longitude != null)
     .forEach((record) => {
-      const marker = L.marker([record.latitude, record.longitude]).addTo(markerLayer);
-      marker.bindPopup(
+      const marker = L.marker([record.latitude, record.longitude], {
+        title: fullAddress(record)
+      }).addTo(markerLayer);
+
+      marker.bindTooltip(
         "<strong>" + esc(fullAddress(record)) + "</strong><br>" +
         esc(joinParts(record.manufacturer, record.model_number) || "Garage door") +
-        (record.door_size ? "<br>" + esc(record.door_size) : "")
+        (record.door_size ? "<br>" + esc(record.door_size) : ""),
+        { direction: "top", offset: [0, -8] }
       );
+
+      marker.on("click", () => openRecordDialog(record.id));
       marker.options.recordId = record.id;
     });
 
@@ -387,7 +428,7 @@ function focusRecordOnMap(id) {
   setTimeout(() => {
     map.setView([record.latitude, record.longitude], 16);
     const marker = markerLayer.getLayers().find((layer) => layer.options.recordId === id);
-    if (marker) marker.openPopup();
+    if (marker) marker.openTooltip();
   }, 150);
 }
 
