@@ -29,19 +29,16 @@
     <section id="authView" class="auth-wrap">
       <div class="panel auth-card">
         <h2>Sign in</h2>
-        <p class="muted">Installation records are stored privately in Supabase, not in this public GitHub repository.</p>
+        <p class="muted">Enter your email and we'll send you a secure sign-in link. No password is needed.</p>
         <form id="authForm">
           <label>Email
-            <input id="email" type="email" autocomplete="email" required>
-          </label>
-          <label>Password
-            <input id="password" type="password" autocomplete="current-password" minlength="6" required>
+            <input id="email" type="email" autocomplete="email" inputmode="email" required>
           </label>
           <div class="button-row">
-            <button class="button primary" type="submit">Sign in</button>
-            <button id="signUpBtn" class="button secondary" type="button">Create account</button>
+            <button id="magicLinkBtn" class="button primary" type="submit">Send sign-in link</button>
           </div>
         </form>
+        <p class="muted">Use the same email each time so you return to the same installation records.</p>
         <p id="authMessage" class="status-text"></p>
       </div>
     </section>
